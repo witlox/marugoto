@@ -1,0 +1,9 @@
+urllib3
+requests
+flask
+connexion
+Flask-DotEnv
+neo4j
+neomodel
+pytest
+pytest-docker-compose

@@ -1,0 +1,375 @@
+---
+  swagger: '2.0'
+  info:
+    version: '0.1'
+    title: Marugoto
+    description: Manage Accounts
+    contact:
+      name: Pim Witlox
+    license:
+      name: GPLv2
+  basePath: /api/v1
+  consumes:
+    - application/json
+  produces:
+    - application/json
+  securityDefinitions:
+    tokenHeader:
+      type: apiKey
+      in: header
+      name: X-TOKEN
+      x-apikeyInfoFunc: api.auth.user_by_token
+  paths:
+    /login:
+      post:
+        summary: login
+        operationId: api.auth.login
+        parameters:
+          - name: username
+            in: query
+            required: true
+            type: string
+          - name: password
+            in: query
+            required: true
+            type: string
+        responses:
+          200:
+            description: authorization token
+            schema:
+              type: string
+          401:
+            description: unauthorized
+          500:
+            description: error while logging in
+    /logout:
+      post:
+        summary: logout
+        operationId: api.auth.logout
+        responses:
+          200:
+            description: logged out
+        security:
+          - tokenHeader: []
+    /find:
+      get:
+        description: Find user by name
+        x-swagger-router-controller: api.user
+        operationId: find_user
+        parameters:
+        - name: name
+          in: query
+          description: username
+          required: true
+          type: string
+        responses:
+          200:
+            description: Profile information for a user
+            schema:
+              $ref: '#/definitions/User'
+          401:
+            description: Not authorized
+          404:
+            description: User not found
+        security:
+          - tokenHeader: []
+    /classrooms:
+      get:
+        description: Get all class rooms
+        x-swagger-router-controller: api.classes
+        operationId: get_class_rooms
+        parameters:
+          - name: active
+            in: query
+            description: Only show active class rooms
+            required: false
+            type: boolean
+        responses:
+          200:
+            description: All class rooms
+            schema:
+              type: array
+              items:
+                $ref: '#/definitions/ClassRoom'
+          401:
+            description: Not authorized
+        security:
+          - tokenHeader: []
+      post:
+        description: Creates a new class room
+        x-swagger-router-controller: api.classes
+        operationId: add_class_room
+        parameters:
+          - name: class_room
+            in: body
+            required: true
+            schema:
+              $ref: '#/definitions/ClassRoom'
+        responses:
+          201:
+            description: Class added
+            schema:
+              $ref: '#/definitions/ClassRoom'
+          500:
+            description: Conflicting state during create
+        security:
+          - tokenHeader: []
+    /classrooms/{rid}:
+      get:
+        description: Return members of a class room
+        x-swagger-router-controller: api.classes
+        operationId: get_class_room_users
+        parameters:
+          - name: rid
+            in: path
+            description: class room id
+            required: true
+            type: integer
+            format: int32
+        responses:
+          200:
+            description: Members of a class room
+            schema:
+              type: array
+              items:
+                $ref: '#/definitions/User'
+          401:
+            description: Not authorized
+          404:
+            description: Class room does not exist
+        security:
+          - tokenHeader: []
+      post:
+        description: Update an existing class room
+        x-swagger-router-controller: api.classes
+        operationId: update_class_room
+        parameters:
+          - name: rid
+            in: path
+            description: class room id
+            required: true
+            type: integer
+            format: int32
+          - name: class_room
+            in: body
+            description: New class room content
+            required: true
+            schema:
+              $ref: '#/definitions/ClassRoom'
+        responses:
+          200:
+            description: Class room updated
+          401:
+            description: Not authorized
+          500:
+            description: Conflict during update
+        security:
+          - tokenHeader: []
+      put:
+        description: Add member to a class room
+        x-swagger-router-controller: api.classes
+        operationId: add_class_room_member
+        parameters:
+          - name: rid
+            in: path
+            description: Target class room id
+            required: true
+            type: integer
+            format: int32
+          - name: u
+            in: query
+            description: Target user
+            required: true
+            type: string
+        responses:
+          201:
+            description: The user has been added
+          401:
+            description: Not authorized
+          404:
+            description: Class room does not exist
+          500:
+            description: Conflict during add
+        security:
+          - tokenHeader: []
+      delete:
+        description: Remove member from a class room
+        x-swagger-router-controller: api.classes
+        operationId: remove_class_room_member
+        parameters:
+          - name: rid
+            in: path
+            description: Target class room id
+            required: true
+            type: integer
+            format: int32
+          - name: u
+            in: query
+            description: Target user
+            required: true
+            type: string
+        responses:
+          200:
+            description: The user has been removed
+          401:
+            description: Not authorized
+          404:
+            description: Class room does not exist
+          500:
+            description: Conflict during remove
+        security:
+          - tokenHeader: []
+    /users:
+      get:
+        description: Get all users
+        x-swagger-router-controller: api.user
+        operationId: get_users
+        responses:
+          200:
+            description: List of all users
+            schema:
+              type: array
+              items:
+                $ref: '#/definitions/User'
+          401:
+            description: Not authorized
+        security:
+          - tokenHeader: []
+      post:
+        description: Create user
+        x-swagger-router-controller: api.user
+        operationId: add_user
+        parameters:
+          - name: u
+            in: body
+            description: User to be added
+            required: true
+            schema:
+              $ref: '#/definitions/User'
+        responses:
+          201:
+            description: User added
+            schema:
+              $ref: '#/definitions/User'
+          401:
+            description: Not authorized
+          500:
+            description: Conflict during create
+        security:
+          - tokenHeader: []
+      delete:
+        description: Remove user
+        x-swagger-router-controller: api.user
+        operationId: remove_user
+        parameters:
+          - name: name
+            in: query
+            description: User to be removed
+            required: true
+            type: string
+        responses:
+          200:
+            description: User deleted
+          401:
+            description: Not authorized
+          500:
+            description: Conflict during delete
+        security:
+          - tokenHeader: []
+    /users/{uid}:
+      get:
+        description: Return user profile
+        x-swagger-router-controller: api.user
+        operationId: get_user
+        parameters:
+          - name: uid
+            in: path
+            description: user id
+            required: true
+            type: integer
+            format: int32
+        responses:
+          200:
+            description: Profile information for a user
+            schema:
+              $ref: '#/definitions/User'
+          404:
+            description: User not found
+        security:
+          - tokenHeader: []
+    /me:
+      get:
+        description: Return current user profile
+        x-swagger-router-controller: api.user
+        operationId: get_myself
+        responses:
+          200:
+            description: Profile information for a user
+            schema:
+              $ref: '#/definitions/User'
+          500:
+            description: Internal error
+        security:
+          - tokenHeader: []
+  definitions:
+    ClassRoom:
+      type: object
+      required:
+        - name
+        - created_by
+        - created_at
+        - ends_at
+      properties:
+        name:
+          type: string
+        created_by:
+          type: object
+            $ref: '#/definitions/User'
+        created_at:
+          type: string
+        ends_at:
+          type: string
+        members:
+          type: array
+            $ref: '#/definitions/User'
+    User:
+      type: object
+      required:
+        - mail
+        - first_name
+        - last_name
+      properties:
+        mail:
+          type: string
+        first_name:
+          type: string
+        last_name:
+          type: string
+        password:
+          type: string
+#        games:
+#          type: array
+#          items:
+#            $ref: '#/definitions/Game'
+        classes:
+          type: array
+          items:
+            $ref: '#/definitions/ClassRoom'
+
+    GameProfile:
+      type: object
+      required:
+        - first_name
+        - last_name
+      properties:
+        first_name:
+          type: string
+        last_name:
+          type: string
+    Game:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
