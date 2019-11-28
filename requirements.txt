@@ -3,6 +3,7 @@ Flask-DotEnv
 python-arango
 networkx
 fuzzywuzzy
+python-Levenshtein
 urllib3
 requests
 pytest

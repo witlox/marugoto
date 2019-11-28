@@ -50,9 +50,9 @@ class Waypoint(object):
         self.timer_visible = timer_visible
         self.level = level
         # tasks that need to be solved destinations to become available
-        self.tasks = {}
+        self.tasks = []
         # required NPC interactions for this destination to be available
-        self.interactions = {}
+        self.interactions = []
         # add oneself to the graph as node
         self.graph.add_node(self)
 
@@ -70,32 +70,30 @@ class Waypoint(object):
     def __repr__(self):
         return f'Waypoint: ({self.title}) ({self.description})'
 
-    @staticmethod
-    def instantiate(dictionary):
-        """
-        Regenerate object from Database Dict
-        :param dictionary: dict from db
-        :return: Waypoint
-        """
-        waypoint = Waypoint(**dictionary)
-        waypoint.__dict__.update(dictionary)
-        for k, v in dictionary.items():
-            if isinstance(v, dict):
-                waypoint.__dict__[k] = Waypoint.instantiate(v)
-        return waypoint
-
-    def add_destination(self, waypoint, task=None, interaction=None):
+    def add_destination(self, waypoint):
         """
         add a destination waypoint
         :param waypoint: destination
-        :param task: task that needs to be solved for this destination to become available
-        :param interaction: specific interaction with NPC required before this destination becomes available
         """
         self.graph.add_edge(self, waypoint)
-        if task:
-            self.tasks[waypoint] = task
-        if interaction:
-            self.interactions[waypoint] = interaction
+
+    def add_task(self, task):
+        """
+        add a task
+        :param task: task that needs to be solved for this waypoint
+        """
+        if task.destination:
+            self.graph.add_edge(self, task.destination)
+        self.tasks.append(task)
+
+    def add_interaction(self, interaction):
+        """
+        add an interaction
+        :param interaction: specific interaction with NPC
+        """
+        if interaction.destination:
+            self.graph.add_edge(self, interaction.destination)
+        self.interactions.append(interaction)
 
     def all_path_nodes(self):
         """

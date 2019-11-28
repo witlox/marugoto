@@ -76,16 +76,16 @@ class PlayerState(object):
         moves = []
         for successor in self.game_instance.game.graph.successors(current):
             # validate answers to return blocked waypoints
-            for waypoint in current.tasks.keys():
-                if current.tasks[waypoint].solve(answer):
-                    moves.append(successor)
+            for task in current.tasks:
+                if task.destination and task.solve(answer):
+                    moves.append(task.destination)
             # check NPC interactions to return waypoints which require dialog
-            for waypoint in current.interactions.keys():
+            for interaction in current.interactions:
                 for npc in self.game_instance.npc_states:
-                    if current.interactions[waypoint] in npc.get_player_dialog(self):
-                        moves.append(successor)
+                    if interaction.destination and interaction in npc.get_player_dialog(self):
+                        moves.append(interaction.destination)
             # and everything else
-            if successor not in current.tasks.keys() and successor not in current.interactions.keys():
+            if successor not in [d.destination for d in current.tasks if d.destination] + [d.destination for d in current.interactions if d.destination]:
                 moves.append(successor)
         return set(moves)
 

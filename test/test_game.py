@@ -22,8 +22,8 @@ def test_adding_task_adds_path():
     game = Game('test')
     start = Waypoint(game.graph, 'start')
     end = Waypoint(game.graph, 'end')
-    task = Task('test description', 'test text', 'answer')
-    start.add_destination(end, task)
+    task = Task(end, 'test description', 'test text', 'answer')
+    start.add_task(task)
     game.set_start(start)
     assert len(game.graph.nodes) == 2
     assert len(game.graph.edges) == 1
@@ -46,8 +46,8 @@ def test_identify_player_path():
     w2 = Waypoint(game.graph, 'w2')
     end = Waypoint(game.graph, 'end')
     start.add_destination(w1)
-    task = Task('test description', 'test text', 'answer')
-    w1.add_destination(w2, task)
+    task = Task(w2, 'test description', 'test text', 'answer')
+    w1.add_task(task)
     w2.add_destination(end)
     game.set_start(start)
     instance = game.create_new_game()

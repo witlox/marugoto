@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-#
 
+from uuid import uuid4
 from datetime import datetime, timedelta
 
 from fuzzywuzzy import fuzz
@@ -15,9 +16,10 @@ class Task(object):
     Tasks are supposed to be solved by players, the logic here is that if a task is solved (a)
     destination waypoint(s) or dialog interaction(s) will become available.
     """
-    def __init__(self, description: str, text: str, solution=None, media=None, ratio=90, days=1, offset=0.01):
+    def __init__(self, destination, description: str, text: str, solution=None, media=None, ratio=90, days=1, offset=0.01):
         """
         each task can have varying solution types; text, date, image, etc.
+        :param destination: destination (waypoint or interaction) that becomes available on completing the task
         :param description: description text used for referencing
         :param text: text describing the task
         :param solution: solution that solves the task
@@ -26,6 +28,8 @@ class Task(object):
         :param days: timedelta allowed on date answers
         :param offset: delta allowed for float answers
         """
+        self.id = uuid4()
+        self.destination = destination
         self.description = description
         self.text = text
         self.solution = solution
@@ -33,6 +37,20 @@ class Task(object):
         self.ratio = ratio
         self.days = days
         self.offset = offset
+
+    def __eq__(self, other):
+        if self and other and isinstance(other, Task):
+            return self.id == other.id
+        return False
+
+    def __hash__(self):
+        return self.id.__hash__()
+
+    def __str__(self):
+        return self.description
+
+    def __repr__(self):
+        return f'Task: ({self.description})'
 
     def solve(self, answer) -> bool:
         """

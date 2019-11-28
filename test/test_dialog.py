@@ -9,6 +9,13 @@ from model.player import Player, NonPlayableCharacterState, PlayerStateException
 
 
 def test_npc_interaction():
+    """
+      start
+        |
+        w1 <- dialog becomes available
+        |
+        end
+    """
     game = Game('test')
     start = Waypoint(game.graph, 'start')
     w1 = Waypoint(game.graph, 'w1')
@@ -31,18 +38,25 @@ def test_npc_interaction():
 
 
 def test_npc_required_response():
-    npc_dialog = Dialog()
-    ds1 = Mail(npc_dialog.graph, 'test subject 1', 'test body 1')
-    ds2 = Mail(npc_dialog.graph, 'test subject 2', 'test body 2')
+    """
+      start
+        |
+        w1 <- dialog becomes available
+        |
+        end <- blocked till dialog in phase 2 (ds2)
+    """
     game = Game('test')
     start = Waypoint(game.graph, 'start')
     w1 = Waypoint(game.graph, 'w1')
     end = Waypoint(game.graph, 'end')
     game.set_start(start)
-    npc_dialog.set_start(ds1, w1)
+    npc_dialog = Dialog()
+    ds1 = Mail(npc_dialog.graph, 'test subject 1', 'test body 1')
     start.add_destination(w1)
+    npc_dialog.set_start(ds1, w1)
+    ds2 = Mail(npc_dialog.graph, 'test subject 2', 'test body 2', destination=end)
     ds1.add_follow_up(ds2, end)
-    w1.add_destination(end, interaction=ds2)
+    w1.add_interaction(ds2)
     instance = game.create_new_game()
     npc = NonPlayableCharacter('test', 'npc').create(instance, npc_dialog)
     instance.add_non_playable_character(npc)

@@ -20,12 +20,6 @@ class MarugotoEncoder(JSONEncoder):
     """
     def default(self, o):
         if isinstance(o, Waypoint):
-            tasks = {}
-            for w, t in o.tasks.items():
-                tasks[json.dumps(w, cls=MarugotoEncoder)] = json.dumps(t, cls=MarugotoEncoder)
-            interactions = {}
-            for w, i in o.interactions.items():
-                interactions[json.dumps(w, cls=MarugotoEncoder)] = json.dumps(i, cls=MarugotoEncoder)
             return {
                 '_type': 'Waypoint',
                 '_key': o.id.hex,
@@ -36,8 +30,8 @@ class MarugotoEncoder(JSONEncoder):
                 'money_limit': o.money_limit,
                 'timer_visible': o.timer_visible,
                 'level': json.dumps(o.level, cls=MarugotoEncoder),
-                'tasks': tasks,
-                'interactions': interactions
+                'tasks': [json.dumps(t, cls=MarugotoEncoder) for t in o.tasks],
+                'interactions': [json.dumps(i, cls=MarugotoEncoder) for i in o.interactions]
             }
         if isinstance(o, Level):
             icon = base64.encodebytes(o.icon) if o.icon else None
@@ -50,6 +44,8 @@ class MarugotoEncoder(JSONEncoder):
             media = json.dumps(base64.encodebytes(o.media)) if o.media else None
             return {
                 '_type': 'Task',
+                'id': o.id.hex,
+                'destination': json.dumps(o.destination, cls=MarugotoEncoder),
                 'description': o.description,
                 'text': o.text,
                 'solution': o.solution,
@@ -62,6 +58,7 @@ class MarugotoEncoder(JSONEncoder):
             return {
                 '_type': 'Interaction',
                 'id': o.id.hex,
+                'destination': json.dumps(o.destination, cls=MarugotoEncoder),
                 'description': o.description,
                 'money_limit': o.money_limit,
                 'time_limit': o.time_limit,
@@ -91,29 +88,33 @@ class MarugotoDecoder(JSONDecoder):
                                 obj['timer_visible'],
                                 json.loads(obj['level'], cls=MarugotoDecoder))
             waypoint.id = UUID(obj['id'])
-            for w, t in obj['tasks'].items():
-                waypoint.tasks[json.loads(w, cls=MarugotoDecoder)] = json.loads(t, cls=MarugotoDecoder)
-            for w, i in obj['interactions'].items():
-                waypoint.interactions[json.loads(w, cls=MarugotoDecoder)] = json.loads(i, cls=MarugotoDecoder)
+            for t in obj['tasks']:
+                waypoint.add_task(json.loads(t, cls=MarugotoDecoder))
+            for i in obj['interactions']:
+                waypoint.add_interaction(json.loads(i, cls=MarugotoDecoder))
             return waypoint
         if obj['_type'] == 'Level':
             icon = base64.decodebytes(obj['icon']) if obj['icon'] else None
             return Level(obj['title'], icon)
         if obj['_type'] == 'Task':
             media = base64.decodebytes(obj['media']) if obj['media'] else None
-            return Task(obj['description'],
+            task = Task(json.loads(obj['destination'], cls=MarugotoDecoder),
+                        obj['description'],
                         obj['text'],
                         obj['solution'],
                         media,
                         obj['ratio'],
                         obj['days'],
                         obj['offset'])
+            task.id = UUID(obj['id'])
+            return task
         if obj['_type'] == 'Interaction':
             interaction = Interaction(nx.DiGraph(),
                                       obj['description'],
                                       obj['money_limit'],
                                       obj['time_limit'],
-                                      json.loads(obj['task'], cls=MarugotoDecoder))
+                                      json.loads(obj['task'], cls=MarugotoDecoder),
+                                      json.loads(obj['destination'], cls=MarugotoDecoder))
             interaction.id = UUID(obj['id'])
             interaction.waypoints = json.loads(obj['waypoints'], cls=MarugotoDecoder)
             return interaction
