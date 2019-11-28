@@ -1,5 +1,9 @@
-pytest
 connexion
 Flask-DotEnv
-peewee
+python-arango
 networkx
+fuzzywuzzy
+urllib3
+requests
+pytest
+pytest-docker-compose

@@ -4,10 +4,8 @@
 import pytest
 
 from model.game import Game, Waypoint
-from model.inputs import TextInput
-from model.instance import SinglePlayerGame
 from model.player import Player, PlayerIllegalMoveException
-from model.task import TextTask
+from model.task import Task
 
 
 def test_simple_graph_generation():
@@ -24,7 +22,7 @@ def test_adding_task_adds_path():
     game = Game('test')
     start = Waypoint(game.graph, 'start')
     end = Waypoint(game.graph, 'end')
-    task = TextTask('test description', 'answer')
+    task = Task('test description', 'test text', 'answer')
     start.add_destination(end, task)
     game.set_start(start)
     assert len(game.graph.nodes) == 2
@@ -33,32 +31,45 @@ def test_adding_task_adds_path():
 
 
 def test_identify_player_path():
+    """
+    start
+      |
+      w1
+      |  <- task answer required before transition becomes available
+      w2
+      |
+      end
+    """
     game = Game('test')
     start = Waypoint(game.graph, 'start')
     w1 = Waypoint(game.graph, 'w1')
     w2 = Waypoint(game.graph, 'w2')
     end = Waypoint(game.graph, 'end')
     start.add_destination(w1)
-    task = TextTask('test task', 'answer')
+    task = Task('test description', 'test text', 'answer')
     w1.add_destination(w2, task)
     w2.add_destination(end)
     game.set_start(start)
+    instance = game.create_new_game()
     player = Player('test', 'player')
-    instance = SinglePlayerGame(game, player, 'testy', 'mctestpants')
-    assert len(instance.player_state.path) == 1
-    assert instance.player_state.path[0] == start
-    assert w1 in instance.player_state.available_moves() and w2 not in instance.player_state.available_moves()
+    instance.add_player(player, 'testy', 'mctestpants')
+    assert len(instance.player_states[0].path) == 1
+    assert instance.player_states[0].path[0] == start
+    assert w1 in instance.player_states[0].available_moves()
+    assert w2 in instance.player_states[0].available_path()
+    # not allowed to skip to end
     with pytest.raises(PlayerIllegalMoveException):
-        instance.player_state.move_to(end)
-    instance.player_state.move_to(w1)
+        instance.player_states[0].move_to(end)
+    instance.player_states[0].move_to(w1)
+    # no backsies
     with pytest.raises(PlayerIllegalMoveException):
-        instance.player_state.move_to(start)
+        instance.player_states[0].move_to(start)
+    # w2 is blocked from w1
     with pytest.raises(PlayerIllegalMoveException):
-        instance.player_state.move_to(w2)
-    inp = TextInput(w2, 'answer')
-    assert w1 not in instance.player_state.available_moves() and w2 in instance.player_state.available_moves(inp)
-    instance.player_state.move_to(w2, inp)
-    assert not instance.player_state.is_finished()
-    instance.player_state.move_to(end)
-    assert instance.player_state.current_position() == end
-    assert instance.player_state.is_finished()
+        instance.player_states[0].move_to(w2)
+    answer = 'answer'
+    instance.player_states[0].move_to(w2, answer)
+    assert not instance.player_states[0].is_finished()
+    instance.player_states[0].move_to(end)
+    assert instance.player_states[0].current_position() == end
+    assert instance.player_states[0].is_finished()

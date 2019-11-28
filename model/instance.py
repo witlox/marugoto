@@ -3,8 +3,7 @@
 
 from datetime import datetime
 
-from model.game import Game
-from model.player import PlayerState, Player
+from model.player import PlayerState, Player, NonPlayableCharacterState
 
 
 class GameInvalidException(Exception):
@@ -14,30 +13,14 @@ class GameInvalidException(Exception):
 
 class GameInstance(object):
     """Instance of a Game"""
-    def __init__(self, game: Game):
-        self.created_at = datetime.utcnow()
-        self.game = game
-
-
-class SinglePlayerGame(GameInstance):
-    def __init__(self, game: Game, player: Player, first_name: str, last_name: str):
+    def __init__(self,
+                 game,
+                 name: str = None,
+                 game_master: Player = None,
+                 starts_at: datetime = None,
+                 ends_at: datetime = None):
         """
-        Single player game instance
-        :param game: associated explicit game
-        :param player: game player
-        :param first_name: first name pseudonym
-        :param last_name: last name pseudonym
-        """
-        if not game.start_is_set():
-            raise GameInvalidException(f'Start not set for ${game.title}')
-        super().__init__(game)
-        self.player_state = PlayerState(player, first_name, last_name, self, game.start)
-
-
-class MultiplayerGame(GameInstance):
-    def __init__(self, game: Game, name: str, game_master: Player, starts_at: datetime, ends_at: datetime):
-        """
-        Multiplayer game
+        Instance of a game
         :param game: associated explicit game
         :param name: name of the game instance
         :param game_master: player hosting the game
@@ -46,12 +29,21 @@ class MultiplayerGame(GameInstance):
         """
         if not game.start_is_set():
             raise GameInvalidException(f'Start not set for ${game.title}')
-        super().__init__(game)
+        self.created_at = datetime.utcnow()
+        self.game = game
         self.name = name
         self.game_master = game_master
         self.starts_at = starts_at
         self.ends_at = ends_at
+        self.npc_states = []
         self.player_states = []
+
+    def add_non_playable_character(self, npc: NonPlayableCharacterState):
+        """
+        add NPC to a multiplayer game
+        :param npc: our non-playable character
+        """
+        self.npc_states.append(npc)
 
     def add_player(self, player: Player, first_name: str, last_name: str):
         """
@@ -60,8 +52,10 @@ class MultiplayerGame(GameInstance):
         :param first_name: first name pseudonym
         :param last_name: last name pseudonym
         """
-        instance = PlayerState(player, first_name, last_name, self.game, self.game.start)
+        instance = PlayerState(player, first_name, last_name, self)
         self.player_states.append(instance)
+        for npc in self.npc_states:
+            npc.add_player(instance)
 
     def remove_player(self, player: Player):
         """
@@ -70,4 +64,6 @@ class MultiplayerGame(GameInstance):
         """
         instance = next(iter([i for i in self.player_states if i.player == player]), None)
         if instance:
+            for npc in self.npc_states:
+                npc.remove_player(instance)
             self.player_states.remove(instance)
