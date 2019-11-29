@@ -22,8 +22,7 @@ def create_game(db: StandardDatabase, game: Game):
         raise GameStateException(f'${game.title} is not acyclic')
     if not game.start_is_set():
         raise GameStateException(f'${game.title} has no starting point')
-    dbg = db.create_graph(game.title)
-    dbg.type = 'game'
+    dbg = db.create_graph(f'game_{game.title}')
     dbg.create_vertex_collection('waypoints')
     path = dbg.create_edge_definition(
         edge_collection='path',
@@ -60,22 +59,22 @@ def create_game(db: StandardDatabase, game: Game):
         for successor in game.graph.successors(s):
             if s not in i.keys():
                 i[s] = []
-                if successor.tasks:
-                    for t in successor.tasks:
-                        dbg.insert_vertex('tasks', json.dumps(t, cls=MarugotoEncoder))
-                        waypoint_tasks.insert({
-                            '_key': f'{t.id.hex}-{successor.id.hex}',
-                            '_from': f'tasks/{t.id.hex}',
-                            '_to': f'waypoints/{successor.id.hex}'
-                        })
-                if successor.interactions:
-                    for n in successor.interactions:
-                        dbg.insert_vertex('interactions', json.dumps(n, cls=MarugotoEncoder))
-                        waypoint_interactions.insert({
-                            '_key': f'{n.id.hex}-{successor.id.hex}',
-                            '_from': f'interactions/{n.id.hex}',
-                            '_to': f'waypoints/{successor.id.hex}'
-                        })
+                # if successor.tasks:
+                #     for t in successor.tasks:
+                #         dbg.insert_vertex('tasks', json.dumps(t, cls=MarugotoEncoder))
+                #         waypoint_tasks.insert({
+                #             '_key': f'{t.id.hex}-{successor.id.hex}',
+                #             '_from': f'tasks/{t.id.hex}',
+                #             '_to': f'waypoints/{successor.id.hex}'
+                #         })
+                # if successor.interactions:
+                #     for n in successor.interactions:
+                #         dbg.insert_vertex('interactions', json.dumps(n, cls=MarugotoEncoder))
+                #         waypoint_interactions.insert({
+                #             '_key': f'{n.id.hex}-{successor.id.hex}',
+                #             '_from': f'interactions/{n.id.hex}',
+                #             '_to': f'waypoints/{successor.id.hex}'
+                #         })
             if successor not in i[s]:
                 path.insert({
                     '_key': f'{s.id.hex}-{successor.id.hex}',
@@ -88,26 +87,20 @@ def create_game(db: StandardDatabase, game: Game):
     walk(game.start, identified)
 
 
-def all_games(db: StandardDatabase):
-    for coll in db.collections():
-        if coll.type and coll.type == 'game':
-            yield coll
-
-
 def read_game(db: StandardDatabase, game: Game):
-    if not db.has_graph(game.title):
+    if not db.has_graph(f'game_{game.title}'):
         raise GameStateException(f'${game.title} does not exist')
 
 
-def get_all_games(db: StandardDatabase, ):
-    pass
+def get_all_games(db: StandardDatabase):
+    return [d['name'][5:] for d in db.graphs() if 'name' in d and d['name'].startswith('game_')]
 
 
 def update_game(db: StandardDatabase, game: Game):
-    if not db.has_graph(game.title):
+    if not db.has_graph(f'game_{game.title}'):
         raise GameStateException(f'${game.title} does not exist')
 
 
 def delete_game(db: StandardDatabase, game: Game):
-    if not db.has_graph(game.title):
+    if not db.has_graph(f'game_{game.title}'):
         raise GameStateException(f'${game.title} does not exist')

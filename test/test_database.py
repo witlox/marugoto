@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-#
+
 import json
 
 import pytest
@@ -9,7 +10,7 @@ from arango import ArangoClient
 from requests.adapters import HTTPAdapter
 from urllib3 import Retry
 
-from database.game import create_game, all_games
+from database.game import create_game, get_all_games
 from model.game import Game, Waypoint
 from model.task import Task
 from util.coder import MarugotoEncoder, MarugotoDecoder
@@ -95,7 +96,7 @@ def test_serialize_deserialize(game):
 
 def test_create_read_database(create_clean_db, game):
     create_game(create_clean_db, game)
-    assert game.title in all_games(create_clean_db)
+    assert game.title in get_all_games(create_clean_db)
 
 
 
