@@ -6,6 +6,7 @@ from uuid import uuid4
 import networkx as nx
 
 from model.instance import GameInstance
+from model.player import NonPlayableCharacter
 
 
 class Level(object):
@@ -49,6 +50,8 @@ class Waypoint(object):
         self.money_limit = money_limit
         self.timer_visible = timer_visible
         self.level = level
+        # inventory items to be added once this waypoint is reached
+        self.items = []
         # tasks that need to be solved destinations to become available
         self.tasks = []
         # required NPC interactions for this destination to be available
@@ -95,6 +98,13 @@ class Waypoint(object):
             self.graph.add_edge(self, interaction.destination)
         self.interactions.append(interaction)
 
+    def add_item(self, item):
+        """
+        inventory items
+        :param item: item
+        """
+        self.items.append(item)
+
     def all_path_nodes(self):
         """
         return all possible waypoints from here
@@ -115,23 +125,39 @@ class Game(object):
     """
     Main container for our Game graph
     """
-    def __init__(self, title: str, image=None):
+    def __init__(self, title: str, image=None, start: Waypoint = None):
         """
         A game is a Directed Acyclic Graph of [Waypoint]
         :param title: title of the game
         :param image: game image
+        :param start: starting waypoint of the game
         """
         self.graph = nx.DiGraph()
         self.title = title
         self.image = image
-        self.start = None
+        self.start = start
+        self.npcs = []
 
     def set_start(self, waypoint):
-        """Starting point of the game"""
+        """
+        Starting point of the game
+        :param waypoint: starting waypoint
+        """
         self.start = waypoint
 
-    def start_is_set(self):
+    def start_is_set(self) -> bool:
+        """
+        check if start is set
+        :return: bool
+        """
         return self.start is not None
+
+    def add_non_playable_character(self, npc: NonPlayableCharacter):
+        """
+        add NPC to a multiplayer game
+        :param npc: our non-playable character
+        """
+        self.npcs.append(npc)
 
     def create_new_game(self, name: str = None, game_master=None, starts_at=None, ends_at=None):
         """

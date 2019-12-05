@@ -10,8 +10,10 @@ from arango import ArangoClient
 from requests.adapters import HTTPAdapter
 from urllib3 import Retry
 
-from database.game import create_game, get_all_games
-from model.game import Game, Waypoint
+from database.game import create, read, update, delete, get_all_games, get_all_dialogs
+from model.dialog import Dialog, Mail, Speech
+from model.game import Waypoint, Game
+from model.player import NonPlayableCharacter
 from model.task import Task
 from util.coder import MarugotoEncoder, MarugotoDecoder
 
@@ -45,17 +47,24 @@ def create_clean_db(wait_for_api):
 @pytest.fixture(scope='function')
 def game():
     """
-                  start
+                  start  (path with dialog)
                   /   \
-                 w1   w2
+               w1 (m1) w2 (d1)
                   \   /
-                   knot
+                   knot1
                  /  |  \
-                w3  w4 w5  <- with input
+                w3  w4 w5  <- with task t1,t2,t3
                 \   |
-                  end
+                  end <- task from dialog td1
     :return: game with described graph
     """
+    #TODO, check interaction model in waypoint
+    dialog = Dialog()
+    dialog_start = Mail(dialog.graph, 'start sub', 'start body')
+    m1 = Mail(dialog.graph, 'second sub', 'second body')
+    td1 = Task(None, 'some task 1', 'some task', 'some solution')
+    d1 = Speech(dialog.graph, 'content', task=td1)
+
     game = Game('test')
     start = Waypoint(game.graph, 'start')
     w1 = Waypoint(game.graph, 'w1')
@@ -78,7 +87,30 @@ def game():
     w3.add_destination(end)
     w4.add_destination(end)
     game.set_start(start)
+
+    dialog_end = Speech(dialog.graph, 'next content', destination=end)
+    dialog.set_start(dialog_start)
+    dialog_start.add_follow_up(d1)
+    dialog_start.add_follow_up(m1)
+    dialog_start.waypoints.append(start)
+    d1.add_follow_up(dialog_end, None)
+
+    game.add_non_playable_character(NonPlayableCharacter('bob', 'test', dialog))
+
     return game
+
+
+@pytest.fixture(scope='function')
+def dialog():
+    """
+        start
+        |   \
+        m1  d1
+            |  <- task required
+            end
+    :return: dialog with described graph
+    """
+    return dialog
 
 
 def test_serialize_deserialize(game):
@@ -91,12 +123,13 @@ def test_serialize_deserialize(game):
     jst = json.dumps(wp, cls=MarugotoEncoder)
     st = json.loads(jst, cls=MarugotoDecoder)
     assert wp == st
-    assert task == st.tasks[0]
+    assert task.id == st.tasks[0]
 
 
-def test_create_read_database(create_clean_db, game):
-    create_game(create_clean_db, game)
+def test_game_crud(create_clean_db, game):
+    create(create_clean_db, game)
+    update(create_clean_db, game)
     assert game.title in get_all_games(create_clean_db)
-
-
-
+    assert len(get_all_dialogs(create_clean_db)) > 0
+    assert game.start == read(create_clean_db, game.title).start
+    delete(create_clean_db, game)

@@ -35,10 +35,11 @@ class Interaction(object):
         self.description = description
         self.money_limit = money_limit
         self.time_limit = time_limit
-        self.waypoints = []
         self.graph.add_node(self)
         self.task = task
         self.destination = destination
+        self.waypoints = []
+        self.items = []
 
     def __eq__(self, other):
         if self and other and isinstance(other, Interaction):
@@ -78,6 +79,13 @@ class Interaction(object):
                 yield successor
             elif not self.waypoints:
                 yield successor
+
+    def add_item(self, item):
+        """
+        inventory items
+        :param item: item
+        """
+        self.items.append(item)
 
     def all_path_nodes(self):
         """
@@ -126,17 +134,29 @@ class Dialog(object):
     """
     Main container for dialogs between a player and a NPC
     """
-    def __init__(self):
+    def __init__(self, start: Interaction = None):
         """
         A dialog is a Directed Acyclic Graph of [Interaction]
+        :param start: starting interaction of dialog
         """
         self.graph = nx.DiGraph()
-        self.start = None
+        self.id = uuid4()
+        if start and start.items:
+            raise Exception(f'dialog start {start.id} has items, this is not allowed')
+        self.start = start
 
-    def set_start(self, interaction, waypoint):
-        """Starting point of a dialog"""
-        interaction.waypoints.append(waypoint)
+    def set_start(self, interaction):
+        """
+        Starting point of a dialog (a dialog start cannot have items)
+        :param interaction: starting interaction of dialog
+        """
+        if interaction and interaction.items:
+            raise Exception(f'dialog start {interaction.id} has items, this is not allowed')
         self.start = interaction
 
     def start_is_set(self) -> bool:
+        """
+        check if start is set
+        :return: bool
+        """
         return self.start is not None

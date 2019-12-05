@@ -3,7 +3,7 @@
 
 from datetime import datetime
 
-from model.player import PlayerState, Player, NonPlayableCharacterState
+from model.player import PlayerState, Player
 
 
 class GameInvalidException(Exception):
@@ -35,15 +35,8 @@ class GameInstance(object):
         self.game_master = game_master
         self.starts_at = starts_at
         self.ends_at = ends_at
-        self.npc_states = []
         self.player_states = []
-
-    def add_non_playable_character(self, npc: NonPlayableCharacterState):
-        """
-        add NPC to a multiplayer game
-        :param npc: our non-playable character
-        """
-        self.npc_states.append(npc)
+        self.npc_states = [n.create(self) for n in self.game.npcs]
 
     def add_player(self, player: Player, first_name: str, last_name: str):
         """

@@ -44,6 +44,7 @@ def test_identify_player_path():
     start = Waypoint(game.graph, 'start')
     w1 = Waypoint(game.graph, 'w1')
     w2 = Waypoint(game.graph, 'w2')
+    w2.add_item('some item')
     end = Waypoint(game.graph, 'end')
     start.add_destination(w1)
     task = Task(w2, 'test description', 'test text', 'answer')
@@ -68,8 +69,10 @@ def test_identify_player_path():
     with pytest.raises(PlayerIllegalMoveException):
         instance.player_states[0].move_to(w2)
     answer = 'answer'
+    assert len(instance.player_states[0].inventory) == 0
     instance.player_states[0].move_to(w2, answer)
     assert not instance.player_states[0].is_finished()
+    assert len(instance.player_states[0].inventory) == 1
     instance.player_states[0].move_to(end)
     assert instance.player_states[0].current_position() == end
     assert instance.player_states[0].is_finished()

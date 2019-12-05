@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-#
+
 from datetime import datetime
+from uuid import UUID
 
 from model.dialog import Dialog, Interaction
 
@@ -62,7 +64,16 @@ class PlayerState(object):
         self.dialogs[npc].append((interaction, response))
 
     def add_stuff(self, key, stuff):
-        self.inventory[datetime.utcnow()](key, stuff)
+        """
+        add stuff to the inventory
+        :param key: id hex of the thing holding the item
+        :param stuff: item to add to inventory
+        """
+        dt = datetime.utcnow()
+        if dt in self.inventory.keys():
+            self.inventory[dt].append((key, stuff))
+        else:
+            self.inventory[dt] = [(key, stuff)]
 
     def available_moves(self, answer=None):
         """
@@ -111,6 +122,14 @@ class PlayerState(object):
         """
         if waypoint not in self.available_moves(answer):
             raise PlayerIllegalMoveException(f'Cannot move from {self.path[-1].title} to {waypoint.title}')
+
+        for item in waypoint.items:
+            self.add_stuff(waypoint, item)
+        for task in waypoint.tasks:
+            if task.items and task.solve(answer):
+                for item in task.items:
+                    self.add_stuff(task, item)
+
         self.path.append(waypoint)
 
         interactions = {}
@@ -129,17 +148,35 @@ class NonPlayableCharacter(object):
     def __init__(self,
                  first_name: str,
                  last_name: str,
+                 dialog: Dialog,
                  salutation: str = None,
                  mail: str = None,
                  image: object = None):
+        if not dialog.start_is_set():
+            raise PlayerStateException(f'Dialog start not set for NPC {first_name} {last_name}')
         self.first_name = first_name
         self.last_name = last_name
+        self.dialog = dialog
         self.salutation = salutation
         self.mail = mail
         self.image = image
 
-    def create(self, game_instance, dialog):
-        return NonPlayableCharacterState(self.first_name, self.last_name, game_instance, dialog, self.salutation, self.mail, self.image)
+    def __eq__(self, other):
+        if self and other and (isinstance(other, NonPlayableCharacterState) or isinstance(other, NonPlayableCharacter)):
+            return self.first_name == other.first_name and self.last_name == other.last_name
+        return False
+
+    def __hash__(self):
+        return hash(f'{self.first_name} {self.last_name}')
+
+    def __str__(self):
+        return f'{self.first_name} {self.last_name}'
+
+    def __repr__(self):
+        return f'NPC: ({self.first_name}) ({self.last_name})'
+
+    def create(self, game_instance):
+        return NonPlayableCharacterState(self.first_name, self.last_name, game_instance, self.dialog, self.salutation, self.mail, self.image)
 
 
 class NonPlayableCharacterState(NonPlayableCharacter):
@@ -151,11 +188,8 @@ class NonPlayableCharacterState(NonPlayableCharacter):
                  salutation: str = None,
                  mail: str = None,
                  image: object = None):
-        if not dialog.start_is_set():
-            raise PlayerStateException(f'Dialog start not set for NPC {first_name} {last_name}')
-        super().__init__(first_name, last_name, salutation, mail, image)
+        super().__init__(first_name, last_name, dialog, salutation, mail, image)
         self.game_instance = game_instance
-        self.dialog = dialog
         self.paths = {}
 
     def add_player(self, instance: PlayerState):
@@ -183,6 +217,12 @@ class NonPlayableCharacterState(NonPlayableCharacter):
         next_interaction = self.available_interaction(instance, answer)
         if next_interaction:
             self.paths[instance].append(next_interaction)
+            if next_interaction.task and next_interaction.task.solve(answer) and next_interaction.task.items:
+                for item in next_interaction.task.items:
+                    instance.add_stuff(next_interaction.task, item)
+            if next_interaction.items:
+                for item in next_interaction.items:
+                    instance.add_stuff(next_interaction, item)
 
     def get_player_dialog(self, instance: PlayerState):
         """

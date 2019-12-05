@@ -16,7 +16,7 @@ class Task(object):
     Tasks are supposed to be solved by players, the logic here is that if a task is solved (a)
     destination waypoint(s) or dialog interaction(s) will become available.
     """
-    def __init__(self, destination, description: str, text: str, solution=None, media=None, ratio=90, days=1, offset=0.01):
+    def __init__(self, destination, description: str, text: str, solution=None, media=None, items=None, ratio=90, days=1, offset=0.01):
         """
         each task can have varying solution types; text, date, image, etc.
         :param destination: destination (waypoint or interaction) that becomes available on completing the task
@@ -24,6 +24,7 @@ class Task(object):
         :param text: text describing the task
         :param solution: solution that solves the task
         :param media: optional media for the task (img, vid, etc.)
+        :param items: inventory items to be added after a task is completed
         :param ratio: fuzzyness ratio lower bound for text answers
         :param days: timedelta allowed on date answers
         :param offset: delta allowed for float answers
@@ -34,6 +35,7 @@ class Task(object):
         self.text = text
         self.solution = solution
         self.media = media
+        self.items = items
         self.ratio = ratio
         self.days = days
         self.offset = offset
