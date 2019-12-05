@@ -15,22 +15,27 @@ from model.player import NonPlayableCharacter
 from util.coder import MarugotoEncoder, MarugotoDecoder
 
 
-class StateException(Exception):
+class GameStateException(Exception):
     pass
 
 
 def create(db: StandardDatabase, game: Game):
+    """
+    save a game to the database
+    :param db: connection
+    :param game: target
+    """
     if not db.has_collection('games'):
         db.create_collection('games')
     db_games = db.collection('games')
     if db_games.find({'key': game.title}):
-        raise StateException(f'{game.title} already in metadata')
+        raise GameStateException(f'{game.title} already in metadata')
     if db.has_graph(game.title):
-        raise StateException(f'{game.title} already defined')
+        raise GameStateException(f'{game.title} already defined')
     if not nx.is_directed_acyclic_graph(game.graph):
-        raise StateException(f'{game.title} is not acyclic')
+        raise GameStateException(f'{game.title} is not acyclic')
     if not game.start_is_set():
-        raise StateException(f'{game.title} has no starting point')
+        raise GameStateException(f'{game.title} has no starting point')
     db_game_graph = db.create_graph(f'game_{game.title}')
     if not db_game_graph.has_vertex_collection('waypoints'):
         db_game_graph.create_vertex_collection('waypoints')
@@ -60,7 +65,7 @@ def create(db: StandardDatabase, game: Game):
 
     for npc in game.npcs:
         if db_npcs.find({'_key': f'{game.title}-{npc.first_name}-{npc.last_name}'}):
-            raise StateException(f'dialog {game.title}-{npc.first_name}-{npc.last_name} already in metadata')
+            raise GameStateException(f'dialog {game.title}-{npc.first_name}-{npc.last_name} already in metadata')
         db_npcs.insert({
             '_key': f'{game.title}-{npc.first_name}-{npc.last_name}',
             'game': f'game_{game.title}',
@@ -73,13 +78,13 @@ def create(db: StandardDatabase, game: Game):
         })
 
         if db_dialogs.find({'_key': npc.dialog.id.hex}):
-            raise StateException(f'dialog {npc.dialog.id} already in metadata')
+            raise GameStateException(f'dialog {npc.dialog.id} already in metadata')
         if db.has_graph(f'dialog_{npc.dialog.id.hex}'):
-            raise StateException(f'dialog {npc.dialog.id} already defined')
+            raise GameStateException(f'dialog {npc.dialog.id} already defined')
         if not nx.is_directed_acyclic_graph(npc.dialog.graph):
-            raise StateException(f'dialog {npc.dialog.id} is not acyclic')
+            raise GameStateException(f'dialog {npc.dialog.id} is not acyclic')
         if not npc.dialog.start_is_set():
-            raise StateException(f'dialog {npc.dialog.id} has no starting point')
+            raise GameStateException(f'dialog {npc.dialog.id} has no starting point')
         db_dialog_graph = db.create_graph(f'dialog_{npc.dialog.id.hex}')
         if not db_dialog_graph.has_vertex_collection('interactions'):
             db_dialog_graph.create_vertex_collection('interactions')
@@ -161,16 +166,22 @@ def create(db: StandardDatabase, game: Game):
     })
 
 
-def read(db: StandardDatabase, title: str):
+def read(db: StandardDatabase, title: str) -> Game:
+    """
+    load an existing game back from the database
+    :param db: connection
+    :param title: game title
+    :return: game object
+    """
     npcs = []
     db_npcs = db.collection('npcs')
     db_dialogs = db.collection('dialogs')
     for db_npc in db_npcs.find({'game': f'game_{title}'}):
         db_dialog = next(db_dialogs.find({'_key': db_npc['dialog']}), None)
         if not db_dialog:
-            raise StateException(f"dialog {db_npc['dialog']} not in metadata")
+            raise GameStateException(f"dialog {db_npc['dialog']} not in metadata")
         if not db.has_graph(f"dialog_{db_npc['dialog']}"):
-            raise StateException(f"dialog {db_npc['dialog']} does not exist")
+            raise GameStateException(f"dialog {db_npc['dialog']} does not exist")
 
         vertices = []
         path = []
@@ -203,16 +214,16 @@ def read(db: StandardDatabase, title: str):
             for edge in e['edges']:
                 source = next(iter([i for i in interactions if i.id == UUID(edge['_from'][13:])]), None)
                 if not source:
-                    raise StateException(f"malformed source for dialog {db_npc['dialog']}")
+                    raise GameStateException(f"malformed source for dialog {db_npc['dialog']}")
                 idx = interactions.index(source)
                 destination = next(iter([i for i in interactions if i.id == UUID(edge['_to'][13:])]), None)
                 if not destination:
-                    raise StateException(f"malformed destination for {source} in dialog {db_npc['dialog']}")
+                    raise GameStateException(f"malformed destination for {source} in dialog {db_npc['dialog']}")
                 source.add_follow_up(destination)
                 interactions[idx] = source
 
         if start_index == -1:
-            raise StateException(f"could not determine start for dialog {db_npc['dialog']}")
+            raise GameStateException(f"could not determine start for dialog {db_npc['dialog']}")
 
         npc = NonPlayableCharacter(db_npc['first_name'], db_npc['last_name'], Dialog(interactions[start_index]))
         npc.salutation = db_npc['salutation']
@@ -223,9 +234,9 @@ def read(db: StandardDatabase, title: str):
     games = db.collection('games')
     db_game = next(games.find({'_key': title}), None)
     if not db_game:
-        raise StateException(f'game {title} not in metadata')
+        raise GameStateException(f'game {title} not in metadata')
     if not db.has_graph(f'game_{title}'):
-        raise StateException(f'game {title} does not exist')
+        raise GameStateException(f'game {title} does not exist')
     vertices = []
     path = []
     for k, v in dict(db.graph(f'game_{title}').traverse(start_vertex=f"waypoints/{db_game['start']}",
@@ -253,7 +264,7 @@ def read(db: StandardDatabase, title: str):
                     if interaction:
                         waypoint.interactions.append(interaction)
                     else:
-                        raise StateException(f'could not locate interaction {i}')
+                        raise GameStateException(f'could not locate interaction {i}')
         waypoints.append(waypoint)
 
     # glue back the task destinations for waypoints
@@ -261,14 +272,14 @@ def read(db: StandardDatabase, title: str):
         if task.destination and isinstance(task.destination, UUID):
             destination = next(iter([w for w in waypoints if w.id == task.destination]), None)
             if not destination:
-                raise StateException(f'could not find destination {task.destination} for task {task.id} in game {title}')
+                raise GameStateException(f'could not find destination {task.destination} for task {task.id} in game {title}')
             task.destination = destination
     # glue back interaction destinations for waypoints
     for interaction in [ias for ia in [w.interactions for w in waypoints if w.interactions] for ias in ia]:
         if interaction.destination and isinstance(interaction.destination, UUID):
             destination = next(iter([w for w in waypoints if w.id == interaction.destination]), None)
             if not destination:
-                raise StateException(f'could not find destination {interaction.destination} for interaction {interaction.id} in game {title}')
+                raise GameStateException(f'could not find destination {interaction.destination} for interaction {interaction.id} in game {title}')
             interaction.destination = destination
 
     # glue back interaction and task destinations, and waypoints for dialogs
@@ -284,12 +295,12 @@ def read(db: StandardDatabase, title: str):
                     if s.destination and isinstance(s.destination, UUID):
                         destination = next(iter([w for w in l if w.id == s.destination]), None)
                         if not destination:
-                            raise StateException(f'could not find destination {s.destination} for interaction {s.id} in game {title}')
+                            raise GameStateException(f'could not find destination {s.destination} for interaction {s.id} in game {title}')
                         s.destination = destination
                     if s.task and s.task.destination and isinstance(s.task.destination, UUID):
                         destination = next(iter([w for w in l if w.id == s.task.destination]), None)
                         if not destination:
-                            raise StateException(f'could not find destination {s.destination} for task {s.task.id} in interaction {s.id} in game {title}')
+                            raise GameStateException(f'could not find destination {s.destination} for task {s.task.id} in interaction {s.id} in game {title}')
                         s.task.destination = destination
                     if s.waypoints:
                         wps = []
@@ -297,7 +308,7 @@ def read(db: StandardDatabase, title: str):
                             if isinstance(waypoint, UUID):
                                 destination = next(iter([w for w in l if w.id == waypoint]), None)
                                 if not destination:
-                                    raise StateException(f'could not find waypoint {waypoint} for interaction {interaction.id} in game {title}')
+                                    raise GameStateException(f'could not find waypoint {waypoint} for interaction {interaction.id} in game {title}')
                                 wps.append(destination)
                             else:
                                 wps.append(waypoint)
@@ -318,16 +329,16 @@ def read(db: StandardDatabase, title: str):
         for edge in e['edges']:
             source = next(iter([i for i in waypoints if i.id == UUID(edge['_from'][10:])]), None)
             if not source:
-                raise StateException(f'malformed source for game {title}')
+                raise GameStateException(f'malformed source for game {title}')
             idx = waypoints.index(source)
             destination = next(iter([i for i in waypoints if i.id == UUID(edge['_to'][10:])]), None)
             if not destination:
-                raise StateException(f'malformed destination for {source} in game {title}')
+                raise GameStateException(f'malformed destination for {source} in game {title}')
             source.add_destination(destination)
             waypoints[idx] = source
 
     if start_index == -1:
-        raise StateException(f'could not determine start for game {title}')
+        raise GameStateException(f'could not determine start for game {title}')
 
     game = Game(title, base64.decodebytes(db_game['image']) if db_game['image'] else None, waypoints[start_index])
     game.npcs = npcs
@@ -336,21 +347,36 @@ def read(db: StandardDatabase, title: str):
 
 
 def get_all_games(db: StandardDatabase) -> [str]:
+    """
+    get all game titles
+    :param db: connection
+    :return: list of all game names or empty list
+    """
     return [d['_key'] for d in db.collection('games')]
 
 
 def get_all_dialogs(db: StandardDatabase) -> [str]:
+    """
+    get all dialog ids
+    :param db: connection
+    :return: list of all dialogs in the system or empty list
+    """
     return [d['_key'] for d in db.collection('dialogs') if '_key' in d]
 
 
 def delete(db: StandardDatabase, game: Game):
+    """
+    delete all objects associated with a game
+    :param db: connection
+    :param game: target
+    """
     db_npcs = db.collection('npcs')
     db_dialogs = db.collection('dialogs')
     tasks = db.collection('tasks')
     for db_npc in db_npcs.find({'game': f'game_{game.title}'}):
         db_dialog = next(db_dialogs.find({'_key': db_npc['dialog']}), None)
         if not db.has_graph(f"dialog_{db_npc['dialog']}"):
-            raise StateException(f"dialog {db_npc['dialog']} does not exist")
+            raise GameStateException(f"dialog {db_npc['dialog']} does not exist")
         for k, v in dict(db.graph(f"dialog_{db_npc['dialog']}").traverse(start_vertex=f"interactions/{db_dialog['start']}",
                                                                          direction='outbound',
                                                                          strategy='dfs',
@@ -368,9 +394,9 @@ def delete(db: StandardDatabase, game: Game):
     games = db.collection('games')
     db_game = next(games.find({'_key': game.title}), None)
     if not db_game:
-        raise StateException(f'game {game.title} not in metadata')
+        raise GameStateException(f'game {game.title} not in metadata')
     if not db.has_graph(f'game_{game.title}'):
-        raise StateException(f'game {game.title} does not exist')
+        raise GameStateException(f'game {game.title} does not exist')
     for node in nx.dfs_tree(game.graph):
         for task in node.tasks:
             db_task = next(tasks.find({'_key': task.id.hex}), None)
@@ -381,6 +407,11 @@ def delete(db: StandardDatabase, game: Game):
 
 
 def update(db: StandardDatabase, game: Game):
+    """
+    update an existing game (currenlty simply deletes and creates it again
+    :param db: connection
+    :param game: target
+    """
     delete(db, game)
     create(db, game)
 

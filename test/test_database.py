@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-#
 
 import json
+from datetime import datetime, timedelta
 
 import pytest
 import requests
@@ -11,9 +12,10 @@ from requests.adapters import HTTPAdapter
 from urllib3 import Retry
 
 from database.game import create, read, update, delete, get_all_games, get_all_dialogs
+from database.instance import save, saves, hosts, load
 from model.dialog import Dialog, Mail, Speech
 from model.game import Waypoint, Game
-from model.player import NonPlayableCharacter
+from model.player import NonPlayableCharacter, Player
 from model.task import Task
 from util.coder import MarugotoEncoder, MarugotoDecoder
 
@@ -133,3 +135,17 @@ def test_game_crud(create_clean_db, game):
     assert len(get_all_dialogs(create_clean_db)) > 0
     assert game.start == read(create_clean_db, game.title).start
     delete(create_clean_db, game)
+
+
+def test_instance_crud(create_clean_db, game):
+    gm = Player('game@master.com', '')
+    instance = game.create_new_game('our multiplayer game', gm, datetime.utcnow()-timedelta(days=1), datetime.utcnow()+timedelta(days=1))
+    player = Player('test@player.com', '')
+    instance.add_player(player, 'pseudonym', 'one')
+    save(create_clean_db, instance)
+    assert (instance.id.hex, instance.name) in saves(create_clean_db, player)
+    assert (instance.id.hex, instance.name) not in hosts(create_clean_db, player)
+    assert (instance.id.hex, instance.name) in hosts(create_clean_db, gm)
+    db_instance = load(create_clean_db, instance.id.hex)
+    assert db_instance.id == instance.id
+    assert db_instance.player_states[0].first_name == 'pseudonym'

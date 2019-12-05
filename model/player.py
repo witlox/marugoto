@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-#
 
 from datetime import datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from model.dialog import Dialog, Interaction
 
@@ -27,6 +27,7 @@ class Player(object):
         :param email: email address of the player
         :param password: hashed password of the player
         """
+        self.id = uuid4()
         self.email = email
         self.password = password
 
@@ -36,10 +37,10 @@ class PlayerState(object):
     Relationship between players and their game state
     Any player can have multiple states for a given game
     """
-    def __init__(self, player: Player, first_name: str, last_name: str, game_instance):
+    def __init__(self, player, first_name: str, last_name: str, game_instance):
         """
         The player state is their in game persona
-        :param player: corresponding player
+        :param player: corresponding player (or their email)
         :param first_name: first name pseudonym
         :param last_name: last name pseudonym
         :param game_instance: instance of the game associated with this state
@@ -120,6 +121,11 @@ class PlayerState(object):
         :param answer: optional input for task
         :return: dict of {npc, [interactions]} for any given NPC
         """
+        if self.game_instance.starts_at and datetime.utcnow() < self.game_instance.starts_at:
+            raise PlayerStateException(f'game has not started yet, wait till {self.game_instance.starts_at} (UTC)')
+        if self.game_instance.ends_at and datetime.utcnow() > self.game_instance.ends_at:
+            raise PlayerStateException(f'game has ended')
+
         if waypoint not in self.available_moves(answer):
             raise PlayerIllegalMoveException(f'Cannot move from {self.path[-1].title} to {waypoint.title}')
 

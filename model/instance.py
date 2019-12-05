@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-#
 
 from datetime import datetime
+from uuid import uuid4
 
 from model.player import PlayerState, Player
 
@@ -21,7 +22,7 @@ class GameInstance(object):
                  ends_at: datetime = None):
         """
         Instance of a game
-        :param game: associated explicit game
+        :param game: associated explicit game (game or title)
         :param name: name of the game instance
         :param game_master: player hosting the game
         :param starts_at: utc start timestamp
@@ -29,6 +30,7 @@ class GameInstance(object):
         """
         if not game.start_is_set():
             raise GameInvalidException(f'Start not set for ${game.title}')
+        self.id = uuid4()
         self.created_at = datetime.utcnow()
         self.game = game
         self.name = name
