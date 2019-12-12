@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-#
 
-from datetime import datetime
+from datetime import datetime, timedelta
+from math import isclose
 from uuid import UUID, uuid4
 
 from model.dialog import Dialog, Interaction
@@ -37,7 +38,7 @@ class PlayerState(object):
     Relationship between players and their game state
     Any player can have multiple states for a given game
     """
-    def __init__(self, player, first_name: str, last_name: str, game_instance):
+    def __init__(self, player, first_name: str, last_name: str, game_instance, initial_budget:float = 0.0):
         """
         The player state is their in game persona
         :param player: corresponding player (or their email)
@@ -49,7 +50,13 @@ class PlayerState(object):
         self.first_name = first_name
         self.last_name = last_name
         self.game_instance = game_instance
-        self.path = [game_instance.game.start]
+        self.budget = initial_budget
+        if game_instance and game_instance.game:
+            self.energy = game_instance.game.energy
+            self.path = [(datetime.utcnow(), game_instance.game.start)]
+        else:
+            self.energy = None
+            self.path = []
         self.dialogs = {}
         self.inventory = {}
 
@@ -60,9 +67,10 @@ class PlayerState(object):
         :param interaction: interaction target
         :param response: response to log
         """
+        self.budget += interaction.budget_modification
         if npc not in self.dialogs.keys():
             self.dialogs[npc] = []
-        self.dialogs[npc].append((interaction, response))
+        self.dialogs[npc].append((datetime.utcnow(), interaction, response))
 
     def add_stuff(self, key, stuff):
         """
@@ -81,14 +89,29 @@ class PlayerState(object):
         show my available moves
         :param answer: optional input for a task
         """
-        current = next(iter(n for n in self.game_instance.game.graph.nodes if n == self.path[-1]), None)
+        previous_move_stamp = self.path[-1][0]
+        current = next(iter(n for n in self.game_instance.game.graph.nodes if n == self.current_position()), None)
         if not current:
             raise PlayerStateException(f'Could not determine current position on path for {self.first_name} '
                                        f'{self.last_name} ({self.player.email} -> {self.game_instance.title}')
         moves = []
         for successor in self.game_instance.game.graph.successors(current):
+            # check if there is a time limit we've exceeded
+            if not isclose(successor.time_limit, 0.0) and datetime.utcnow() > previous_move_stamp + timedelta(seconds=successor.time_limit):
+                continue
+            # check if there is a budget requirement we don't meet
+            if not isclose(successor.money_limit, 0.0) and self.budget < successor.money_limit:
+                continue
+            # check if there is an energy requirement we don't meet
+            if self.energy and 'weight' in self.game_instance.game.graph.edges[current, successor] and self.game_instance.game.graph.edges[current, successor]['weight']:
+                if self.energy - self.game_instance.game.graph.edges[current, successor]['weight'] < 0:
+                    continue
             # validate answers to return blocked waypoints
             for task in current.tasks:
+                if not isclose(task.time_limit, 0.0) and datetime.utcnow() > previous_move_stamp + timedelta(seconds=task.time_limit):
+                    continue
+                if not isclose(task.money_limit, 0.0) and self.budget < task.money_limit:
+                    continue
                 if task.destination and task.solve(answer):
                     moves.append(task.destination)
             # check NPC interactions to return waypoints which require dialog
@@ -105,14 +128,14 @@ class PlayerState(object):
         """
         show my available path
         """
-        current = next(iter(n for n in self.game_instance.game.graph.nodes if n == self.path[-1]), None)
+        current = next(iter(n for n in self.game_instance.game.graph.nodes if n == self.current_position()), None)
         if not current:
             raise PlayerStateException(f'Could not determine current position on path for {self.first_name} '
                                        f'{self.last_name} ({self.player.email} -> {self.game_instance.game.title}')
         return current.all_path_nodes()
 
     def current_position(self):
-        return self.path[-1]
+        return self.path[-1][1]
 
     def move_to(self, waypoint, answer=None):
         """
@@ -127,16 +150,23 @@ class PlayerState(object):
             raise PlayerStateException(f'game has ended')
 
         if waypoint not in self.available_moves(answer):
-            raise PlayerIllegalMoveException(f'Cannot move from {self.path[-1].title} to {waypoint.title}')
+            raise PlayerIllegalMoveException(f'Cannot move from {self.current_position().title} to {waypoint.title}')
 
-        for item in waypoint.items:
-            self.add_stuff(waypoint, item)
+        if waypoint.items:
+            for item in waypoint.items:
+                self.add_stuff(waypoint, item)
         for task in waypoint.tasks:
+            if task.solve(answer):
+                self.budget += task.budget_modification
             if task.items and task.solve(answer):
                 for item in task.items:
                     self.add_stuff(task, item)
+        self.budget += waypoint.budget_modification
 
-        self.path.append(waypoint)
+        if self.energy and 'weight' in self.game_instance.game.graph.edges[self.current_position(), waypoint] and \
+                self.game_instance.game.graph.edges[self.current_position(), waypoint]['weight']:
+            self.energy -= self.game_instance.game.graph.edges[self.current_position(), waypoint]['weight']
+        self.path.append((datetime.utcnow(), waypoint))
 
         interactions = {}
         for npc in self.game_instance.npc_states:
@@ -144,7 +174,7 @@ class PlayerState(object):
         return interactions
 
     def is_finished(self):
-        return self.path[-1].is_finish()
+        return self.current_position().is_finish()
 
 
 class NonPlayableCharacter(object):
@@ -190,7 +220,7 @@ class NonPlayableCharacterState(NonPlayableCharacter):
                  first_name: str,
                  last_name: str,
                  game_instance,
-                 dialog: Dialog,
+                 dialog,
                  salutation: str = None,
                  mail: str = None,
                  image: object = None):
@@ -203,7 +233,7 @@ class NonPlayableCharacterState(NonPlayableCharacter):
         when adding a new player to the game, initialize the NPC state for the given player
         :param instance: player state
         """
-        self.paths[instance] = []
+        self.paths[instance] = [(datetime.utcnow(), self.dialog.start)]
 
     def remove_player(self, instance: PlayerState):
         """
@@ -222,7 +252,7 @@ class NonPlayableCharacterState(NonPlayableCharacter):
         instance.add_dialog_response(self, interaction, answer)
         next_interaction = self.available_interaction(instance, answer)
         if next_interaction:
-            self.paths[instance].append(next_interaction)
+            self.paths[instance].append((datetime.utcnow(), next_interaction))
             if next_interaction.task and next_interaction.task.solve(answer) and next_interaction.task.items:
                 for item in next_interaction.task.items:
                     instance.add_stuff(next_interaction.task, item)
@@ -236,7 +266,7 @@ class NonPlayableCharacterState(NonPlayableCharacter):
         :param instance: player state
         :return: Interactions between player and npc
         """
-        return self.paths[instance]
+        return [i[1] for i in self.paths[instance]]
 
     def available_interaction(self, instance: PlayerState, answer=None):
         """
@@ -245,23 +275,21 @@ class NonPlayableCharacterState(NonPlayableCharacter):
         :param answer: optional answer for a given NPC task (like respond to email)
         :return Interaction (or None)
         """
-        if not self.paths[instance]:
-            if instance.current_position() in self.dialog.start.waypoints:
-                self.paths[instance] = [self.dialog.start]
-                return self.dialog.start
-        current = next(iter(n for n in self.dialog.graph.nodes if n == self.paths[instance][-1]), None)
+        previous = self.paths[instance][-1]
+        current = next(iter(n for n in self.dialog.graph.nodes if n == previous[1]), None)
         if not current:
             raise PlayerStateException(f'Dialog position error for {instance.first_name} {instance.last_name} '
                                        f'({instance.player.email})')
         for successor in self.dialog.graph.successors(current):
-            if successor.waypoints and instance.path[-1] in successor.waypoints:
-                if successor.task and successor.task.solve(answer):
-                    return successor
-                elif not successor.task:
-                    return successor
-            elif not successor.waypoints:
-                if successor.task and successor.task.solve(answer):
-                    return successor
-                elif not successor.task:
-                    return successor
+            if (isclose(successor.money_limit, 0.0) or successor.money_limit < instance.budget) and (isclose(successor.time_limit, 0.0) or datetime.now() < previous[0] + timedelta(seconds=successor.time_limit)):
+                if successor.waypoints and instance.path[-1][1] in successor.waypoints:
+                    if successor.task and successor.task.solve(answer):
+                        return successor
+                    elif not successor.task:
+                        return successor
+                elif not successor.waypoints:
+                    if successor.task and successor.task.solve(answer):
+                        return successor
+                    elif not successor.task:
+                        return successor
         return None

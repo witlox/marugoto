@@ -26,3 +26,10 @@ Currently players register using an e-mail address and a password. When joining 
 give first and last name pseudonyms for their in game character. A player can play multiple instances of the same game
 concurrently. All NPCs in a game have a state per game instance, in which they keep track of their interactions with players.
 Waypoints and NPCs can add items to the players inventory in game. Interactions with NPCs are added to the player state as well.
+
+## Weighed paths and energy
+
+Every game path can have a weight (this is a regular DAG weight expressed as a float). When creating a game it can be 
+initiated with a total amount of 'energy' that a player starts with. If the amount of starting energy is set, each path
+that is traversed and has a weight, will deduct the weight from the total amount of energy. If the deduction would lead
+to a negative number, the path will be blocked.

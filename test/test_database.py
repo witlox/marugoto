@@ -2,11 +2,13 @@
 # -*- coding: utf-8 -*-#
 
 import json
+import os
 from datetime import datetime, timedelta
 
 import pytest
 import requests
 from arango import ArangoClient
+from dotenv import load_dotenv
 
 from requests.adapters import HTTPAdapter
 from urllib3 import Retry
@@ -22,6 +24,9 @@ from util.coder import MarugotoEncoder, MarugotoDecoder
 pytest_plugins = ("docker_compose",)
 
 
+load_dotenv()
+
+
 @pytest.fixture(scope='function')
 def wait_for_api(function_scoped_container_getter):
     """
@@ -32,18 +37,18 @@ def wait_for_api(function_scoped_container_getter):
     request_session.mount('http://', HTTPAdapter(max_retries=retries))
     service = function_scoped_container_getter.get("arangodb")
     print(service)
-    assert request_session.get('http://localhost:8529')
-    return request_session, 'http://localhost:8529'
+    assert request_session.get(os.getenv('DB_URI'))
+    return request_session, os.getenv('DB_URI')
 
 
 @pytest.fixture(scope='function')
 def create_clean_db(wait_for_api):
-    client = ArangoClient(hosts='http://localhost:8529')
-    sys_db = client.db('_system', username='root', password='passwd')
-    if sys_db.has_database('test'):
-        sys_db.delete_database('test')
-    sys_db.create_database('test')
-    return client.db('test', username='root', password='passwd')
+    client = ArangoClient(hosts=os.getenv('DB_URI'))
+    sys_db = client.db('_system', username=os.getenv('DB_USER'), password=os.getenv('DB_PASSWORD'))
+    if sys_db.has_database(os.getenv('DB_NAME')):
+        sys_db.delete_database(os.getenv('DB_NAME'))
+    sys_db.create_database(os.getenv('DB_NAME'))
+    return client.db(os.getenv('DB_NAME'), username=os.getenv('DB_USER'), password=os.getenv('DB_PASSWORD'))
 
 
 @pytest.fixture(scope='function')
@@ -79,7 +84,7 @@ def game():
     w5 = Waypoint(game.graph, 'w5')
     t3 = Task(w5, 'some task 3', 'some task')
     end = Waypoint(game.graph, 'end')
-    start.add_destination(w1)
+    start.add_destination(w1, 1.1)
     start.add_destination(w2)
     w1.add_destination(knot)
     w2.add_destination(knot)
@@ -138,14 +143,15 @@ def test_game_crud(create_clean_db, game):
 
 
 def test_instance_crud(create_clean_db, game):
+    create(create_clean_db, game)
     gm = Player('game@master.com', '')
     instance = game.create_new_game('our multiplayer game', gm, datetime.utcnow()-timedelta(days=1), datetime.utcnow()+timedelta(days=1))
     player = Player('test@player.com', '')
     instance.add_player(player, 'pseudonym', 'one')
     save(create_clean_db, instance)
-    assert (instance.id.hex, instance.name) in saves(create_clean_db, player)
-    assert (instance.id.hex, instance.name) not in hosts(create_clean_db, player)
-    assert (instance.id.hex, instance.name) in hosts(create_clean_db, gm)
+    assert instance.name in [f[1] for f in saves(create_clean_db, player)]
+    assert instance.name not in [f[1] for f in hosts(create_clean_db, player)]
+    assert instance.name in [f[1] for f in hosts(create_clean_db, gm)]
     db_instance = load(create_clean_db, instance.id.hex)
     assert db_instance.id == instance.id
     assert db_instance.player_states[0].first_name == 'pseudonym'

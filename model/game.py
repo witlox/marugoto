@@ -28,17 +28,21 @@ class Waypoint(object):
                  graph: nx.DiGraph,
                  title: str,
                  description: str = None,
-                 time_limit: float = None,
-                 money_limit: float = None,
-                 timer_visible: bool = None,
+                 time_limit: float = 0.0,
+                 money_limit: float = 0.0,
+                 budget_modification: float = 0.0,
+                 items=None,
+                 timer_visible: bool = False,
                  level: Level = None):
         """
         Each Waypoint can have tasks, and can have destinations.
         :param graph: directed graph that contains this waypoint
         :param title: name of the waypoint
         :param description: descriptions are used for transition texts on links connecting waypoints
-        :param time_limit: if there is a limit for showing this waypoint
+        :param time_limit: if there is a limit for showing this waypoint (in seconds)
         :param money_limit: if this waypoint can only be reached if a certain amount of money is available
+        :param budget_modification: modify budget if waypoint is reached
+        :param items: items to add to inventory if waypoint is reached
         :param timer_visible: show the timer if a time-limit has been set
         :param level: a game level associated with the waypoint
         """
@@ -48,10 +52,10 @@ class Waypoint(object):
         self.description = description
         self.time_limit = time_limit
         self.money_limit = money_limit
+        self.budget_modification = budget_modification
         self.timer_visible = timer_visible
         self.level = level
-        # inventory items to be added once this waypoint is reached
-        self.items = []
+        self.items = items
         # tasks that need to be solved destinations to become available
         self.tasks = []
         # required NPC interactions for this destination to be available
@@ -73,12 +77,16 @@ class Waypoint(object):
     def __repr__(self):
         return f'Waypoint: ({self.title}) ({self.description})'
 
-    def add_destination(self, waypoint):
+    def add_destination(self, waypoint, weight: float = None):
         """
         add a destination waypoint
         :param waypoint: destination
+        :param weight: potential edge weight
         """
-        self.graph.add_edge(self, waypoint)
+        if not weight:
+            self.graph.add_edge(self, waypoint)
+        else:
+            self.graph.add_edge(self, waypoint, weight=weight)
 
     def add_task(self, task):
         """
@@ -97,13 +105,6 @@ class Waypoint(object):
         if interaction.destination:
             self.graph.add_edge(self, interaction.destination)
         self.interactions.append(interaction)
-
-    def add_item(self, item):
-        """
-        inventory items
-        :param item: item
-        """
-        self.items.append(item)
 
     def all_path_nodes(self):
         """
@@ -125,17 +126,19 @@ class Game(object):
     """
     Main container for our Game graph
     """
-    def __init__(self, title: str, image=None, start: Waypoint = None):
+    def __init__(self, title: str, image=None, start: Waypoint = None, energy: float = None):
         """
         A game is a Directed Acyclic Graph of [Waypoint]
         :param title: title of the game
         :param image: game image
         :param start: starting waypoint of the game
+        :param energy: total amount of energy for a game
         """
         self.graph = nx.DiGraph()
         self.title = title
         self.image = image
         self.start = start
+        self.energy = energy
         self.npcs = []
 
     def set_start(self, waypoint):

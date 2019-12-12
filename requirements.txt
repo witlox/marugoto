@@ -1,9 +1,10 @@
 connexion
-Flask-DotEnv
+python-dotenv
 python-arango
 networkx
 fuzzywuzzy
 python-Levenshtein
+python-jose
 urllib3
 requests
 pytest

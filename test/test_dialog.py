@@ -57,8 +57,7 @@ def test_npc_required_response():
     ds1.waypoints.append(w1)
     start.add_destination(w1)
     npc_dialog.set_start(ds1)
-    ds2 = Mail(npc_dialog.graph, 'test subject 2', 'test body 2', destination=end)
-    ds2.add_item('test item')
+    ds2 = Mail(npc_dialog.graph, 'test subject 2', 'test body 2', items=['test item'], destination=end)
     ds1.add_follow_up(ds2, end)
     w1.add_interaction(ds2)
     npc = NonPlayableCharacter('test', 'npc', npc_dialog)
@@ -66,13 +65,13 @@ def test_npc_required_response():
     instance = game.create_new_game()
     instance.add_player(Player('test', 'player'), 'testy', 'mctestpants')
     assert len(instance.player_states[0].available_moves()) == 1
-    interaction = instance.player_states[0].move_to(w1)
+    interactions = instance.player_states[0].move_to(w1)
     assert len(instance.player_states[0].available_moves()) == 0
     npc_instance = next(iter([n for n in instance.npc_states if n == npc]), None)
     if not npc_instance:
         assert fail('could not find npc instance in game instance')
     assert len(instance.player_states[0].inventory) == 0
-    npc_instance.update_player_dialog(instance.player_states[0], interaction, 'mail response')
+    npc_instance.update_player_dialog(instance.player_states[0], interactions[npc], 'mail response')
     assert len(instance.player_states[0].inventory) == 1
     assert len(instance.player_states[0].available_moves()) == 1
     assert instance.player_states[0].move_to(end)

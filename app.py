@@ -1,9 +1,11 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-#
+
 import os
 import logging
-import uuid
 import connexion
 
-from flask_dotenv import DotEnv
+from dotenv import load_dotenv
 
 
 class Server:
@@ -13,15 +15,14 @@ class Server:
     def __init__(self):
         logging.basicConfig(level=logging.INFO)
         self.connexion_app = connexion.FlaskApp(__name__, specification_dir="./swagger")
-        env = DotEnv()
-        env_loc = os.path.join(os.path.dirname(os.path.expanduser(os.path.expandvars(__file__))), '.env')
-        env.init_app(self.connexion_app.app, env_file=env_loc, verbose_mode=False)
-        self.connexion_app.add_api(self.connexion_app.app.config["SWAGGER_FILE"], options={'swagger_ui': True})
+        load_dotenv()
 
-        self.port = int(self.connexion_app.app.config['CC_PORT']) or 8080
-        self.debug = bool(self.connexion_app.app.config["DEBUG"]) or False
+        self.connexion_app.app.secret_key = os.getenv('SECRET_KEY')
+        self.connexion_app.add_api(os.getenv('SWAGGER_FILE'), options={'swagger_ui': True})
 
-        self.connexion_app.app.secret_key = self.connexion_app.app.config["SECRET_KEY"] or uuid.uuid4()
+        self.port = int(os.getenv('PORT', 8080))
+        self.debug = bool(os.getenv('DEBUG', False))
+
         # orm_handler.db_init()
 
         @self.connexion_app.app.after_request
@@ -39,7 +40,7 @@ class Server:
         #     orm_handler.db_session.remove()
 
     def run(self):
-        if self.connexion_app.app.config["CC_ENV"] in ["dev", "local", "test", "docker"]:
+        if self.debug:
             print("Running in Debug Mode")
             self.connexion_app.run(port=self.port, debug=True, threaded=True)
         else:

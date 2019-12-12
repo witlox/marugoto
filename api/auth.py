@@ -1,16 +1,20 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-#
 
+import os
 import logging
-import hashlib
-import sys
+import re
 from time import time
 
+from arango import ArangoClient
 from connexion import NoContent
 from flask import session
+from jose import jwt, ExpiredSignatureError
+
+from database.player import authenticate, add_token, remove_token, validate, get_all_player_emails, create
+from model.player import PlayerStateException
 
 logger = logging.getLogger('api.auth')
-tokens = {}
 
 
 def generate_token(identifier):
@@ -19,110 +23,73 @@ def generate_token(identifier):
     :param identifier: name of user or service
     :return: JWT token
     """
+    logger.debug(f'generate token request for {identifier}')
     timestamp = int(time())
     payload = {
-        "iss": config.token().get('issuer'),
+        "iss": os.getenv('TOKEN_ISSUER'),
         "iat": int(timestamp),
-        "exp": int(timestamp + int(config.token().get('lifetime'))),
+        "exp": int(timestamp + int(os.getenv('TOKEN_LIFETIME', 3600))),
         "sub": str(identifier),
     }
-    secret = config.token().get('secret')
-    if not secret:
-        secret = config.general().get('secret')
-    return jwt.encode(payload, secret, algorithm=config.token().get('algorithm'))
+    token = jwt.encode(payload, os.getenv('SECRET_KEY'), algorithm=os.getenv('TOKEN_ALGO'))
+    client = ArangoClient(hosts=os.getenv('DB_URI'))
+    db = client.db(os.getenv('DB_NAME'), username=os.getenv('DB_USER'), password=os.getenv('DB_PASSWORD'))
+    add_token(db, identifier, token)
+    return token
 
 
 def user_by_token(token, required_scopes=None):
-    result = validate(token)
-    if result:
-        return dict(sub=next((name for name, t in tokens.items() if t == token), None), uid=result)
-    return None
+    try:
+        return validate_token(token)[0]
+    except:
+        return None
 
 
-def validate(token):
+def validate_token(token):
     """
     validate if token is valid and not expired
     :param token: JWT token
-    :return: user id, service id, or None if not valid or expired
+    :return: nothing or dict(mail, uid), 500, 401 or 200
     """
-    if token not in tokens.values():
-        logger.warning("invalid token supplied {0}".format(token))
-        return None
-    name = next((name for name, t in tokens.items() if t == token), None)
-    if not name:
-        return None
-    logger.debug("token request for {0}".format(name))
-    try:
-        secret = config.token().get('secret')
-        if not secret:
-            secret = config.general().get('secret')
-        jwt.decode(token, secret, algorithms=[config.token().get('algorithm')])
-        if 'admin' in session:
-            return session['admin']
-        if 'service' in session:
-            return session['service']
-        user = db_session.query(User).filter(User.dom_name == name).one_or_none()
-        if not user:
-            return None
-        return user.id
-    except ExpiredSignatureError:
-        logger.debug("token {0} for {1} expired, removing it".format(token, name))
-        tokens.pop(name, None)
-    except JWTError:
-        logger.exception("error decoding token")
-    return None
+    logger.debug(f'validate token request for {token}')
+    client = ArangoClient(hosts=os.getenv('DB_URI'))
+    db = client.db(os.getenv('DB_NAME'), username=os.getenv('DB_USER'), password=os.getenv('DB_PASSWORD'))
+    player = validate(db, token)
+    if player:
+        try:
+            jwt.decode(token, os.getenv('SECRET_KEY'), algorithms=[os.getenv('TOKEN_ALGO')])
+        except ExpiredSignatureError:
+            logger.info(f'token {token} expired for {player.email}')
+            remove_token(db, player.email, token)
+            return NoContent, 401
+        return dict(sub=player.email, uid=player.id), 200
+    else:
+        logger.warning(f'unable to validate {token}')
+        return NoContent, 500
 
 
-def access_secret_verify(access, secret):
-    """
-    validate access and secret for services
-    :param access: access code
-    :param secret: sha256 of secret
-    :return: service name or None
-    """
-    try:
-        s = db_session.query(Service)
-        service = s.filter(Service.access == access).one_or_none()
-        if not service:
-            logger.warning("could not identify service by id {0}".format(access))
-            return None
-        if service.secret != hashlib.sha256(secret.encode('utf-8')).hexdigest():
-            logger.error("verification failed for service with id {0}".format(access))
-        return service.name, service.id
-    except Exception as e:
-        logger.error("failed login: {0}".format(e))
-        return None
-
-
-def login(username, password):
+def login(player):
     """
     login user or service
-    :param username: username or service
-    :param password: password of sha256(secret)
-    :return: token, 200 or 401
+    :param player: dict containing mail and password
+    :return: nothing or token, 500, 200 or 401
     """
+    if 'mail' not in player or 'password' not in player:
+        return 'not all parameters supplies', 500
+    mail = player['mail']
+    password = player['password']
+    logger.debug(f'login request for {mail}')
     if 'username' in session:
-        return "You are already logged in {0}".format(session['username']), 500
-    if username == config.admin().get('access') and hashlib.sha256(config.admin().get('secret').encode('utf-8')).hexdigest() == password:
-        session['username'] = 'admin'
-        session['admin'] = sys.maxsize
-        token = generate_token('admin')
-        tokens['admin'] = token
-        return token, 200
-    (service, sid) = access_secret_verify(username, password)
-    if service:
-        session['username'] = service
-        session['service'] = sid
-        token = generate_token(service)
-        tokens[service] = token
-        return token, 200
-    if not ldap_manager:
-        init_ldap()
-    if ldap_manager:
-        if AuthenticationResponseStatus.success == ldap_manager.authenticate(username, password):
-            session['username'] = username
-            token = generate_token(username)
-            tokens[username] = token
+        return f'You are already logged in {mail}', 500
+    else:
+        client = ArangoClient(hosts=os.getenv('DB_URI'))
+        db = client.db(os.getenv('DB_NAME'), username=os.getenv('DB_USER'), password=os.getenv('DB_PASSWORD'))
+        player = authenticate(db, mail, password, os.getenv('SECRET_KEY'))
+        if player:
+            token = generate_token(mail)
+            session['username'] = mail
+            session['uid'] = player.id
+            session['token'] = token
             return token, 200
     return NoContent, 401
 
@@ -132,15 +99,55 @@ def logout():
     logout user or service
     :return: 200
     """
+    logger.debug('logout request')
     if 'username' in session:
-        tokens.pop(session['username'], None)
         del(session['username'])
-    if 'admin' in session:
-        tokens.pop(session['admin'], None)
-        del(session['admin'])
-    if 'service' in session:
-        tokens.pop(session['service'], None)
-        del(session['service'])
+    if 'uid' in session:
+        del(session['uid'])
     if 'token' in session:
         del(session['token'])
     return NoContent, 200
+
+
+def register(player):
+    """
+    register new user
+    :param player: dict containing mail and password
+    :return: msg or token, 500 or 200
+    """
+    if 'mail' not in player or 'password' not in player:
+        return f'not all parameters supplies', 500
+    mail = player['mail']
+    password = player['password']
+    logger.debug(f'new user request for {mail}')
+    if 'username' in session:
+        return f'You are already logged in {mail}', 500
+    else:
+        client = ArangoClient(hosts=os.getenv('DB_URI'))
+        db = client.db(os.getenv('DB_NAME'), username=os.getenv('DB_USER'), password=os.getenv('DB_PASSWORD'))
+        try:
+            if next(iter([e for e in get_all_player_emails(db) if e == mail])):
+                logger.warning(f'player already registered under {mail}')
+                return f'player already registered under {mail}', 500
+        except PlayerStateException:
+            logger.info('players collection not initialized')
+        if os.getenv('PASSWORD_COMPLEXITY') == 'simple':
+            if len(password) < 6:
+                return f'password needs to be at least 6 characters', 422
+        else:
+            if len(password) < 8:
+                return f'password needs to be at least 8 characters', 422
+            if not re.search(r'\d', password):
+                return f'password needs at least 1 digit', 422
+            if not re.search(r'[A-Z]', password):
+                return f'password needs at least 1 upper case character', 422
+            if not re.search(r'[a-z]', password):
+                return f'password needs at least 1 lower case character', 422
+            if not re.search(r'\W', password):
+                return f"password needs at least one special symbol", 422
+        player = create(db, mail, password, os.getenv('SECRET_KEY'))
+        session['username'] = mail
+        session['uid'] = player.id
+        token = generate_token(mail)
+        session['token'] = token
+        return token, 201

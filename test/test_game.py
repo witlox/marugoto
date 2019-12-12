@@ -43,8 +43,7 @@ def test_identify_player_path():
     game = Game('test')
     start = Waypoint(game.graph, 'start')
     w1 = Waypoint(game.graph, 'w1')
-    w2 = Waypoint(game.graph, 'w2')
-    w2.add_item('some item')
+    w2 = Waypoint(game.graph, 'w2', items=['some item'])
     end = Waypoint(game.graph, 'end')
     start.add_destination(w1)
     task = Task(w2, 'test description', 'test text', 'answer')
@@ -55,7 +54,7 @@ def test_identify_player_path():
     player = Player('test', 'player')
     instance.add_player(player, 'testy', 'mctestpants')
     assert len(instance.player_states[0].path) == 1
-    assert instance.player_states[0].path[0] == start
+    assert instance.player_states[0].path[0][1] == start
     assert w1 in instance.player_states[0].available_moves()
     assert w2 in instance.player_states[0].available_path()
     # not allowed to skip to end

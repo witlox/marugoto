@@ -18,8 +18,10 @@ class Interaction(object):
     def __init__(self,
                  graph: nx.DiGraph,
                  description: str,
-                 money_limit: float,
-                 time_limit: float,
+                 money_limit: float = 0.0,
+                 time_limit: float = 0.0,
+                 budget_modification: float = 0.0,
+                 items=None,
                  task: Task = None,
                  destination=None):
         """
@@ -27,6 +29,9 @@ class Interaction(object):
         :param graph: directed graph that contains this interaction
         :param description: description of the interaction which is shown as a text for ancestor interactions
         :param money_limit: interaction only available if a player has a given amount of money
+        :param time_limit: time limit for interaction response (in seconds)
+        :param budget_modification: modify budget when reaching interaction
+        :param items: items to add to inventory if dialog is reached
         :param task: task that needs to be solved for dialog to continue
         :param destination: destination that becomes available after completing this interaction
         """
@@ -35,11 +40,12 @@ class Interaction(object):
         self.description = description
         self.money_limit = money_limit
         self.time_limit = time_limit
+        self.budget_modification = budget_modification
+        self.items = items
         self.graph.add_node(self)
         self.task = task
         self.destination = destination
         self.waypoints = []
-        self.items = []
 
     def __eq__(self, other):
         if self and other and isinstance(other, Interaction):
@@ -80,13 +86,6 @@ class Interaction(object):
             elif not self.waypoints:
                 yield successor
 
-    def add_item(self, item):
-        """
-        inventory items
-        :param item: item
-        """
-        self.items.append(item)
-
     def all_path_nodes(self):
         """
         return all possible interactions from here
@@ -107,11 +106,13 @@ class Speech(Interaction):
                  graph: nx.DiGraph,
                  content: str,
                  description: str = None,
-                 time_limit: float = None,
-                 money_limit: float = None,
+                 time_limit: float = 0.0,
+                 money_limit: float = 0.0,
+                 budget_modification: float = 0.0,
+                 items=None,
                  task: Task = None,
                  destination=None):
-        super().__init__(graph, description, time_limit, money_limit, task, destination)
+        super().__init__(graph, description, time_limit, money_limit, budget_modification, items, task, destination)
         self.content = content
 
 
@@ -121,11 +122,13 @@ class Mail(Interaction):
                  subject: str,
                  body: str,
                  description: str = None,
-                 time_limit: float = None,
-                 money_limit: float = None,
+                 time_limit: float = 0.0,
+                 money_limit: float = 0.0,
+                 budget_modification: float = 0.0,
+                 items=None,
                  task: Task = None,
                  destination=None):
-        super().__init__(graph, description, time_limit, money_limit, task, destination)
+        super().__init__(graph, description, time_limit, money_limit, budget_modification, items, task, destination)
         self.subject = subject
         self.body = body
 
