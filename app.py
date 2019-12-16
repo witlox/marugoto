@@ -21,7 +21,7 @@ class Server:
         self.connexion_app.add_api(os.getenv('SWAGGER_FILE'), options={'swagger_ui': True})
 
         self.port = int(os.getenv('PORT', 8080))
-        self.debug = bool(os.getenv('DEBUG', False))
+        self.debug = bool(os.getenv('DEBUG', True))
 
         # orm_handler.db_init()
 

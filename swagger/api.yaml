@@ -73,6 +73,79 @@
             description: error during creation
             schema:
               type: string
+    /unregister:
+      post:
+        summary: unregister player
+        operationId: api.auth.remove
+        responses:
+          200:
+            description: player removed
+            schema:
+              type: string
+          401:
+            description: unauthorized
+          500:
+            description: error during removal
+            schema:
+              type: string
+        security:
+          - tokenHeader: []
+    /games:
+      get:
+        description: get all games
+        operationId: api.games.all_games
+        responses:
+          200:
+            description: List of all games
+            schema:
+              type: array
+              items:
+                $ref: '#/definitions/Game'
+          401:
+            description: Not authorized
+        security:
+          - tokenHeader: []
+      post:
+        description: Game to add
+        operationId: api.games.add_game
+        parameters:
+          - name: game
+            in: body
+            description: Game to add
+            required: true
+            schema:
+              $ref: '#/definitions/Game'
+        responses:
+          201:
+            description: Game added
+            schema:
+              $ref: '#/definitions/Game'
+          401:
+            description: Not authorized
+          500:
+            description: Conflict during add
+        security:
+          - tokenHeader: []
+      delete:
+        description: Remove game
+        operationId: api.games.remove_game
+        parameters:
+          - name: title
+            in: query
+            description: Game to be removed
+            required: true
+            type: string
+        responses:
+          200:
+            description: Game removed
+          401:
+            description: Not authorized
+          404:
+            description: Game not found
+          500:
+            description: Conflict during remove
+        security:
+          - tokenHeader: []
   definitions:
     Player:
       type: object
@@ -85,3 +158,225 @@
           type: string
         password:
           type: string
+          format: password
+    NPC:
+      type: object
+      required:
+        - first
+        - last
+        - dialog
+      properties:
+        _type:
+          type: string
+        first:
+          type: string
+        last:
+          type: string
+        dialog:
+          $ref: '#/definitions/Dialog'
+        salutation:
+          type: string
+        mail:
+          type: string
+        image:
+          type: string
+          format: byte
+    Task:
+      type: object
+      properties:
+        id:
+          type: string
+        _type:
+          type: string
+        destination:
+          type: string
+        description:
+          type: string
+        solution:
+          type: string
+        media:
+          type: string
+          format: byte
+        items:
+          type: array
+          items:
+            type: string
+        time_limit:
+          type: number
+          format: float
+        money_limit:
+          type: number
+          format: float
+        budget_modification:
+          type: number
+          format: float
+        ratio:
+          type: number
+          format: integer
+        days:
+          type: number
+          format: integer
+        offset:
+          type: number
+          format: float
+    Interaction:
+      type: object
+      required:
+        - description
+      properties:
+        _key:
+          type: string
+        _type:
+          type: string
+        description:
+          type: string
+        time_limit:
+          type: number
+          format: float
+        money_limit:
+          type: number
+          format: float
+        budget_modification:
+          type: number
+          format: float
+        items:
+          type: array
+          items:
+            type: string
+        task:
+          type: string
+        destination:
+          type: object
+        waypoints:
+          type: array
+          items:
+            type: string
+    Speech:
+      allOf:
+        - $ref: '#/definitions/Interaction'
+        - type: object
+          properties:
+            content:
+              type: string
+    Mail:
+      allOf:
+        - $ref: '#/definitions/Interaction'
+        - type: object
+          properties:
+            subject:
+              type: string
+            body:
+              type: string
+    Dialog:
+      type: object
+      properties:
+        _key:
+          type: string
+        _type:
+          type: string
+        start:
+          type: string
+        mails:
+          type: array
+          items:
+            $ref: '#/definitions/Mail'
+        speeches:
+          type: array
+          items:
+            $ref: '#/definitions/Speech'
+        graph:
+          type: array
+          items:
+            $ref: '#/definitions/Vertex'
+    Level:
+      type: object
+      properties:
+        _type:
+          type: string
+        title:
+          type: string
+        icon:
+          type: string
+          format: byte
+    Waypoint:
+      type: object
+      required:
+        - title
+      properties:
+        _key:
+          type: string
+        _type:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        time_limit:
+          type: number
+          format: float
+        money_limit:
+          type: number
+          format: float
+        budget_modification:
+          type: number
+          format: float
+        items:
+          type: array
+          items:
+            type: string
+        timer_visible:
+          type: boolean
+        level:
+          $ref: '#/definitions/Level'
+        tasks:
+          type: array
+          items:
+            type: string
+        interactions:
+          type: array
+          items:
+            type: string
+    Vertex:
+      type: object
+      required:
+        - from
+        - to
+      properties:
+        from:
+          type: string
+        to:
+          type: string
+        weight:
+          type: number
+          format: float
+    Game:
+      type: object
+      required:
+        - title
+      properties:
+        title:
+          type: string
+        image:
+          type: string
+          format: byte
+        energy:
+          type: number
+          format: float
+        graph:
+          type: array
+          items:
+            $ref: '#/definitions/Vertex'
+        start:
+          type: string
+        waypoints:
+          type: array
+          items:
+            $ref: '#/definitions/Waypoint'
+        tasks:
+          type: array
+          items:
+            $ref: '#/definitions/Task'
+        npcs:
+          type: array
+          items:
+            $ref: '#/definitions/NPC'

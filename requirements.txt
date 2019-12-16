@@ -1,4 +1,5 @@
 connexion
+connexion[swagger-ui]
 python-dotenv
 python-arango
 networkx
@@ -9,3 +10,4 @@ urllib3
 requests
 pytest
 pytest-docker-compose
+schemathesis

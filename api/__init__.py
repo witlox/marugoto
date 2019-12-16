@@ -2,3 +2,4 @@
 # -*- coding: utf-8 -*-#
 
 import api.auth
+import api.games

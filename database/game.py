@@ -23,11 +23,12 @@ class GameStateException(Exception):
     pass
 
 
-def create(db: StandardDatabase, game: Game):
+def create(db: StandardDatabase, game: Game, creator=None):
     """
     save a game to the database
     :param db: connection
     :param game: target
+    :param creator: creator of the game
     """
     logger.info(f'create called for {game.title}')
     if not db.has_collection('games'):
@@ -196,7 +197,8 @@ def create(db: StandardDatabase, game: Game):
     db_games.insert({
         '_key': game.title,
         'start': game.start.id.hex,
-        'image': base64.encodebytes(game.image) if game.image else None
+        'image': base64.encodebytes(game.image) if game.image else None,
+        'creator': creator
     })
 
 
@@ -441,16 +443,28 @@ def get_all_dialogs(db: StandardDatabase) -> [str]:
     return [d['_key'] for d in db.collection('dialogs') if '_key' in d]
 
 
-def delete(db: StandardDatabase, game: Game):
+def delete(db: StandardDatabase, game: Game, requester=None):
     """
     delete all objects associated with a game
     :param db: connection
     :param game: target
+    :param requester: player requesting the delete
     """
     logger.info(f'delete called for {game.title}')
     db_npcs = db.collection('npcs')
     db_dialogs = db.collection('dialogs')
     tasks = db.collection('tasks')
+    games = db.collection('games')
+    db_game = next(games.find({'_key': game.title}), None)
+    if not db_game:
+        logger.warning(f'game {game.title} not in metadata')
+        raise GameStateException(f'game {game.title} not in metadata')
+    if not db.has_graph(f'game_{game.title}'):
+        logger.warning(f'game {game.title} not in metadata')
+        raise GameStateException(f'game {game.title} does not exist')
+    if db_game['creator'] and not db_game['creator'] == requester:
+        raise GameStateException(f'cannot delete game {game.title}, you are not the owner')
+
     for db_npc in db_npcs.find({'game': f'game_{game.title}'}):
         db_dialog = next(db_dialogs.find({'_key': db_npc['dialog']}), None)
         if not db.has_graph(f"dialog_{db_npc['dialog']}"):
@@ -470,14 +484,7 @@ def delete(db: StandardDatabase, game: Game):
         db.delete_document(db_dialog)
         db.delete_graph(f"dialog_{db_npc['dialog']}", drop_collections=True)
         db.delete_document(db_npc)
-    games = db.collection('games')
-    db_game = next(games.find({'_key': game.title}), None)
-    if not db_game:
-        logger.warning(f'game {game.title} not in metadata')
-        raise GameStateException(f'game {game.title} not in metadata')
-    if not db.has_graph(f'game_{game.title}'):
-        logger.warning(f'game {game.title} not in metadata')
-        raise GameStateException(f'game {game.title} does not exist')
+
     for node in nx.dfs_tree(game.graph):
         for task in node.tasks:
             db_task = next(tasks.find({'_key': task.id.hex}), None)

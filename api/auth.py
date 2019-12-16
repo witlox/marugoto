@@ -11,8 +11,8 @@ from connexion import NoContent
 from flask import session
 from jose import jwt, ExpiredSignatureError
 
-from database.player import authenticate, add_token, remove_token, validate, get_all_player_emails, create
-from model.player import PlayerStateException
+from database.player import authenticate, add_token, remove_token, validate, get_all_player_emails, create, delete
+from model.player import PlayerStateException, Player
 
 logger = logging.getLogger('api.auth')
 
@@ -151,3 +151,26 @@ def register(player):
         token = generate_token(mail)
         session['token'] = token
         return token, 201
+
+
+def remove():
+    """
+    remove an existing player
+    :return: msg, code
+    """
+    if 'token' not in session:
+        return f'cannot find token', 500
+    p, code = validate_token(session['token'])
+    if code != 200:
+        return f'problem removing player', code
+    try:
+        client = ArangoClient(hosts=os.getenv('DB_URI'))
+        db = client.db(os.getenv('DB_NAME'), username=os.getenv('DB_USER'), password=os.getenv('DB_PASSWORD'))
+        player = Player(p['sub'], '')
+        player.id = p['uid']
+        logger.info(f"deleting player {p['sub']} ({p['uid']})")
+        delete(db, player)
+        return logout()
+    except PlayerStateException as e:
+        return f"error while deleting player {p['sub']}, {e}", 500
+
