@@ -1,5 +1,5 @@
 connexion
-connexion[swagger-ui]
+swagger-ui-bundle
 python-dotenv
 python-arango
 networkx
